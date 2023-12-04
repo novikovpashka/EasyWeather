@@ -75,11 +75,12 @@ dependencies {
     implementation ("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation ("com.squareup.okhttp3:logging-interceptor:4.10.0")
     implementation ("com.google.accompanist:accompanist-navigation-animation:0.28.0")
-    implementation ("com.google.dagger:hilt-android:2.48")
-    kapt ("com.google.dagger:hilt-compiler:2.44")
+    implementation ("com.google.dagger:hilt-android:2.48.1")
+    kapt  ("com.google.dagger:hilt-compiler:2.48.1")
     implementation ("androidx.hilt:hilt-navigation-compose:1.1.0")
     implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation ("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
+    implementation ("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
 
 
 }

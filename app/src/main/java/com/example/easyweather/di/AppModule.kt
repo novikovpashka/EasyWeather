@@ -51,5 +51,4 @@ class AppModule {
         return NetworkConnectionInterceptor(context)
     }
 
-
 }
