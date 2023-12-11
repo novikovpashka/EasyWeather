@@ -1,11 +1,12 @@
 package com.example.easyweather.data.api
 
-import com.google.gson.annotations.SerializedName
+import androidx.room.Entity
 
+@Entity
 data class ForecastDay(
-    @SerializedName("date"       ) var date      : String?         = null,
-    @SerializedName("date_epoch" ) var dateEpoch : Long?            = null,
-    @SerializedName("day"        ) var day       : Day?            = Day(),
-    @SerializedName("astro"      ) var astro     : Astro?          = Astro(),
-    @SerializedName("hour"       ) var hour      : ArrayList<Hour> = arrayListOf()
+
+    val dateEpoch: Long,
+    val day: Day,
+    val astro: Astro
+
 )

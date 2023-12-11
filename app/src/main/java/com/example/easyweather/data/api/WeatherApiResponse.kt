@@ -5,8 +5,13 @@ import com.google.gson.annotations.SerializedName
 
 data class WeatherApiResponse(
 
-    @SerializedName("location" ) var location : Location? = Location(),
-    @SerializedName("current"  ) var current  : Current?  = Current(),
-    @SerializedName("forecast" ) var forecast : Forecast? = Forecast()
+    @SerializedName("location")
+    val location: Location,
+
+    @SerializedName("current")
+    val current: Current,
+
+    @SerializedName("forecast")
+    val forecast: Forecast
 
 )

@@ -3,6 +3,7 @@ package com.example.easyweather.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.easyweather.data.api.WeatherApi
+import com.example.easyweather.data.api.WeatherApiResponse
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,10 +24,14 @@ class HomeViewModel @Inject constructor(private val api: WeatherApi) : ViewModel
         viewModelScope.launch(Dispatchers.IO) {
 
             val response = api.getWeather(query = "London")
-            _weather.value = response.current!!.tempC.toString()
 
         }
+
     }
 
+}
+
+sealed class WeatherUiState {
+    data class Success(val weatherApiResponse: WeatherApiResponse) : WeatherUiState()
 
 }
