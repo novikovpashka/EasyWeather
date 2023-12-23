@@ -4,7 +4,7 @@ import androidx.room.Embedded
 import androidx.room.Relation
 
 data class WeatherWithForecastDay(
-    @Embedded val currentWeather: CurrentWeather,
+    @Embedded val weather: Weather,
     @Relation(
         parentColumn = "cityId",
         entityColumn = "cityId"
