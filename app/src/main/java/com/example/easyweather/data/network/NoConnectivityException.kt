@@ -1,4 +1,4 @@
-package com.example.easyweather.data.api
+package com.example.easyweather.data.network
 
 import java.io.IOException
 

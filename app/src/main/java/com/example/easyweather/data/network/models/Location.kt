@@ -1,4 +1,4 @@
-package com.example.easyweather.data.api
+package com.example.easyweather.data.network.models
 
 import com.google.gson.annotations.SerializedName
 
@@ -11,6 +11,12 @@ data class Location(
     val region: String,
 
     @SerializedName("country")
-    val country: String
+    val country: String,
+
+    @SerializedName("lat")
+    val latitude: Double,
+
+    @SerializedName("lon")
+    val longitude: Double
 
 )

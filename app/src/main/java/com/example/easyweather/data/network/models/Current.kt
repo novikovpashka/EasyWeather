@@ -1,11 +1,11 @@
-package com.example.easyweather.data.api
+package com.example.easyweather.data.network.models
 
 import com.google.gson.annotations.SerializedName
 
 data class Current(
 
     @SerializedName("last_updated_epoch")
-    val lastUpdatedEpoch: Long,
+    val lastUpdatedEpoch: Int,
 
     @SerializedName("temp_c")
     val tempC: Double,
@@ -17,16 +17,16 @@ data class Current(
     val windKph: Double,
 
     @SerializedName("wind_degree")
-    val windDegree: Double,
+    val windDegree: Int,
 
     @SerializedName("wind_dir")
     val windDir: String,
 
     @SerializedName("humidity")
-    val humidity: Double,
+    val humidity: Int,
 
     @SerializedName("cloud")
-    val cloud: Double,
+    val cloud: Int,
 
     @SerializedName("feelslike_c")
     val feelslikeC: Double

@@ -1,4 +1,4 @@
-package com.example.easyweather.data.api
+package com.example.easyweather.data.network
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -10,10 +10,8 @@ import java.io.IOException
 
 
 class NetworkConnectionInterceptor(
-    context: Context
+    private val applicationContext: Context
 ) : Interceptor {
-
-    private val applicationContext = context.applicationContext
 
     @Throws(IOException::class)
     override fun intercept(chain: Interceptor.Chain): Response {

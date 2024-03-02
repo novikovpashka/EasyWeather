@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">Easy Weather</string>
+    <string name="location_permission_dialog_title">Enable location access</string>
+    <string name="location_permission_dialog_ok_button_text">Grant permission</string>
+    <string name="location_permission_dialog_text">Location permission required for this feature to be available.\nPlease grant the permission</string>
+    <string name="location_permission_dialog_rationale_text">The location is important for this app. Please grant the permission.</string>
+    <string name="location_permission_cant_access">Can\'t access to location services. Try again later.</string>
+
+
 </resources>
