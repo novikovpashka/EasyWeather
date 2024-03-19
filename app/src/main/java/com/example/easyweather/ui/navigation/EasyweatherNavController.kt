@@ -14,7 +14,7 @@ object MainDestinations {
 }
 
 @Composable
-fun rememberEasyweatherNavController(
+fun rememberEasyWeatherNavController(
     navController: NavHostController = rememberNavController()
 ): EasyweatherNavController = remember(navController) {
     EasyweatherNavController(navController)

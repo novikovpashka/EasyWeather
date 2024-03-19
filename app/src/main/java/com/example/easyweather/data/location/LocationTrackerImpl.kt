@@ -45,7 +45,6 @@ class LocationTrackerImpl @Inject constructor(
                     continuation.resume(it)
                 }
                 addOnFailureListener {
-
                     continuation.resume(null)
                 }
                 addOnCanceledListener {

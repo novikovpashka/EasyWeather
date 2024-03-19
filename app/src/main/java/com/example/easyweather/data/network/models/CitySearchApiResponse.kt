@@ -29,10 +29,13 @@ data class City(
 
 )
 
-
 fun City.asExternalModel(): CityExternalModel {
     return CityExternalModel(
-        id = id, city = name, country = country, latitude = lat, longitude = lon
+        id = "${this.name},${this.country}",
+        city = name,
+        country = country,
+        latitude = lat,
+        longitude = lon
     )
 }
 

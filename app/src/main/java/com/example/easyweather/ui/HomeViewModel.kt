@@ -1,11 +1,9 @@
 package com.example.easyweather.ui
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.easyweather.data.model.CityExternalModel
 import com.example.easyweather.data.model.WeatherWithForecast
-import com.example.easyweather.data.network.models.WeatherApiResponse
 import com.example.easyweather.data.repository.CityRepositoryImpl
 import com.example.easyweather.data.repository.CitySearchResponse
 import com.example.easyweather.data.repository.CurrentWeatherResponse
@@ -14,10 +12,16 @@ import com.example.easyweather.data.repository.WeatherRepositoryImpl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -29,11 +33,19 @@ class HomeViewModel @Inject constructor(
     private val cityRepositoryImpl: CityRepositoryImpl
 ) : ViewModel() {
 
-    private val _weather = MutableStateFlow("Hello")
-    val weather: StateFlow<String> = _weather
+    val weather: StateFlow<WeatherUiState> = weatherRepositoryImpl.weather.map {
+        WeatherUiState.Success(it)
+    }.stateIn(
+        scope = viewModelScope,
+        initialValue = WeatherUiState.Loading,
+        started = SharingStarted.WhileSubscribed(5_000)
+    )
 
-    private val _state = MutableStateFlow("nothing")
-    val state: StateFlow<String> = _state
+    private val _weatherUiState = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
+    val weatherUiState: StateFlow<WeatherUiState> = _weatherUiState
+
+    private val _searchUiState = MutableStateFlow<SearchUiState>(SearchUiState.Loading)
+    val searchUiState: StateFlow<SearchUiState> = _searchUiState
 
     private val _locationPermissionFirstTimeRequest = MutableStateFlow(false)
     val locationPermissionFirstTimeRequested: StateFlow<Boolean> =
@@ -45,25 +57,26 @@ class HomeViewModel @Inject constructor(
 
     private val searchJobQuery = mutableListOf<Job>()
 
-    private val _savedCitiesWeather: MutableStateFlow<List<WeatherWithForecast>> =
-        MutableStateFlow(emptyList())
-    val savedCitiesWeather: StateFlow<List<WeatherWithForecast>> = _savedCitiesWeather
-
-
-
     init {
+        isLocationPermissionFirstTimeRequested()
+        loadWeather()
+    }
+
+    private fun isLocationPermissionFirstTimeRequested() {
+        viewModelScope.launch {
+            userPreferencesRepository.userDataFlow.collect {
+                _locationPermissionFirstTimeRequest.value =
+                    it.locationPermissionBeenRequestedOnce
+            }
+        }
+    }
+
+    private fun loadWeather() {
         viewModelScope.launch {
             weatherRepositoryImpl.weather.filterNotNull().collect {
                 if (it.isNotEmpty()) {
-                    _weather.value = it[0].weather.city
+                    _weatherUiState.value = WeatherUiState.Success(it)
                 }
-                _savedCitiesWeather.value = it
-            }
-        }
-        viewModelScope.launch {
-            userPreferencesRepository.userPreferencesFlow.collect {
-                _locationPermissionFirstTimeRequest.value =
-                    it.locationPermissionFirstTimeRequest
             }
         }
     }
@@ -76,28 +89,22 @@ class HomeViewModel @Inject constructor(
             searchJobQuery.clear()
         }
         val job = viewModelScope.launch {
-            cityRepositoryImpl.searchCity(query).filterNotNull()
-                .collectLatest {
-                    when (it) {
+            cityRepositoryImpl.searchCity(query.trim()).filterNotNull().conflate()
+                .onEach { delay(200) }
+                .collectLatest { response ->
+                    when (response) {
                         is CitySearchResponse.Loading -> {
-                            Log.v("mytag", "search loading")
+                            delay(200)
+                            _searchUiState.value = SearchUiState.Loading
                         }
 
                         is CitySearchResponse.Success -> {
-                            Log.v("mytag", "search success")
-
-                            it.cities?.let { cities ->
-                                _searchedCities.value = cities
-                            }
+                            _searchedCities.value = response.cities
+                            _searchUiState.value = SearchUiState.Success(response.cities)
                         }
 
                         is CitySearchResponse.Error -> {
-                            it.message.let { message ->
-                                if (message != null) {
-                                    Log.v("mytag", message)
-                                }
-                            }
-
+                            _searchUiState.value = SearchUiState.Error(response.message)
                         }
                     }
                 }
@@ -105,39 +112,43 @@ class HomeViewModel @Inject constructor(
         searchJobQuery.add(job)
     }
 
-    fun saveCity(latLon: String) = viewModelScope.launch{
+    fun saveCity(latLon: String) = viewModelScope.launch {
         weatherRepositoryImpl.loadWeatherForLocation(latLon).filterNotNull().collect {
         }
     }
 
-    fun refreshCurrentCity() = viewModelScope.launch {
+    fun refreshCurrentLocationCity() = viewModelScope.launch {
         weatherRepositoryImpl.loadWeatherForCurrentLocation().filterNotNull().collect {
             when (it) {
-                is CurrentWeatherResponse.Success -> _state.value = "Success"
-                is CurrentWeatherResponse.Error -> _state.value = it.message.toString()
-                is CurrentWeatherResponse.Loading -> _state.value = "Loading"
+                is CurrentWeatherResponse.Success -> Unit
+                is CurrentWeatherResponse.Error -> _weatherUiState.value =
+                    WeatherUiState.Error(it.message.toString())
+
+                is CurrentWeatherResponse.Loading -> _weatherUiState.value = WeatherUiState.Loading
             }
         }
     }
 
-    fun deleteSavedCity (id: String) = viewModelScope.launch (Dispatchers.IO) {
+    fun deleteSavedCity(id: String) = viewModelScope.launch(Dispatchers.IO) {
         weatherRepositoryImpl.deleteSavedCity(id)
     }
 
-    fun setLocationPermissionFirstTimeRequest(locationPermissionFirstTimeRequest: Boolean) =
+    fun setLocationPermissionBeenRequestedOnce() =
         viewModelScope.launch {
-            userPreferencesRepository.setLocationPermissionPermanentlyDeclined(
-                locationPermissionFirstTimeRequest
-            )
+            userPreferencesRepository.setLocationPermissionBeenRequestedOnce()
         }
-
 }
 
 sealed class WeatherUiState {
-    data object Empty : WeatherUiState()
-    data class Success(val weatherApiResponse: WeatherApiResponse) : WeatherUiState()
+    data class Success (val weather: List<WeatherWithForecast>) : WeatherUiState()
     data object Loading : WeatherUiState()
     data class Error(val error: String) : WeatherUiState()
+}
+
+sealed class SearchUiState {
+    data class Success(val searchedCities: List<CityExternalModel>) : SearchUiState()
+    data object Loading : SearchUiState()
+    data class Error(val error: String) : SearchUiState()
 }
 
 

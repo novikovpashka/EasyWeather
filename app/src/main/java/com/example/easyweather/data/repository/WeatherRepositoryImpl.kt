@@ -13,9 +13,7 @@ import com.example.easyweather.data.network.models.asDatabaseModelForecast
 import com.example.easyweather.data.network.models.asDatabaseModelWeather
 import com.example.easyweather.data.network.models.currentLocationAsDatabaseModelWeather
 import com.example.easyweather.data.network.models.getId
-import com.example.easyweather.data.repository.interfaces.WeatherRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flow
@@ -38,7 +36,6 @@ class WeatherRepositoryImpl @Inject constructor(
     override fun loadWeatherForCurrentLocation() = flow {
         try {
             val currentLocation = locationTracker.getCurrentLocation()
-            Log.v("mytag", currentLocation.toString())
             if (currentLocation != null) {
                 val response =
                     weatherApi.getWeatherByCity(query = "${currentLocation.latitude},${currentLocation.longitude}")
@@ -83,7 +80,6 @@ class WeatherRepositoryImpl @Inject constructor(
             response.body()
                 ?.let {
                     val x = weatherDao.insertWeather(it.asDatabaseModelWeather())
-                    Log.v("mytag", x.toString())
                 }
             response.body()?.let { weatherApiResponse ->
                 val cityId = weatherApiResponse.getId()
@@ -106,16 +102,13 @@ class WeatherRepositoryImpl @Inject constructor(
         .conflate()
         .flowOn(Dispatchers.IO)
 
+    override fun updateWeatherForSavedCities() {
+        TODO("Not yet implemented")
+    }
+
     override suspend fun deleteSavedCity(id: String) {
         weatherDao.deleteCity(id)
     }
-}
-
-
-sealed class Resource<T>(val data: T? = null, val message: String? = null) {
-    class Success<T>(data: T) : Resource<T>(data)
-    class Error<T>(message: String, data: T? = null) : Resource<T>(data, message)
-    class Loading<T> : Resource<T>()
 }
 
 sealed class CurrentWeatherResponse(val message: String? = null) {

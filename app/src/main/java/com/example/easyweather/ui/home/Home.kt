@@ -2,191 +2,453 @@ package com.example.easyweather.ui.home
 
 import android.Manifest
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntOffsetAsState
-import androidx.compose.animation.core.animateValueAsState
-import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.ScrollableDefaults
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.easyweather.R
 import com.example.easyweather.data.model.CityExternalModel
 import com.example.easyweather.data.model.WeatherWithForecast
-import com.example.easyweather.data.model.getCityAndCountry
-import com.example.easyweather.ui.HomeViewModel
+import com.example.easyweather.ui.WeatherUiState
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
-import kotlinx.coroutines.flow.MutableStateFlow
+
+const val DURATION = 400
+val SEARCH_FIELD_HEIGHT = 48.dp
+val SEARCH_FIELD_HORIZONTAL_PADDING = 16.dp
+val SEARCH_FIELD_CORNER_RADIUS = SEARCH_FIELD_HEIGHT / 2
+val DEFAULT_SPACER_HEIGHT = 8.dp
 
 
 @OptIn(
-    ExperimentalPermissionsApi::class,
-    ExperimentalMaterial3Api::class,
-    ExperimentalFoundationApi::class
+    ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class
 )
 @Composable
 fun Home(
-    onDayClick: (Long) -> Unit, viewModel: HomeViewModel = hiltViewModel()
+    onDayClick: (Long) -> Unit,
+    onSaveCityClick: () -> Unit,
+    onSearchCityTextField: (query: String) -> Unit,
+    onOpenSearchedCity: (id: String) -> Unit,
+    weatherState: WeatherUiState,
+    searchedCities: State<List<CityExternalModel>>,
+    locationPermissionBeenRequestedOnce: Boolean,
+    setLocationPermissionFirstTimeRequest: () -> Unit,
+    refreshCurrentLocationCity: () -> Unit
 ) {
-    val savedCitiesWeather by viewModel.savedCitiesWeather.collectAsState()
-    val currentWeather by viewModel.weather.collectAsState()
-    val currentState by viewModel.state.collectAsState()
-    val locationPermissionFirstTimeRequested by viewModel.locationPermissionFirstTimeRequested.collectAsState()
+
+    val systemBarPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
+    val bottomBarPadding = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
+    val screenHeight =
+        LocalConfiguration.current.screenHeightDp.dp + systemBarPadding + bottomBarPadding
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+
     val locationPermissionState = rememberPermissionState(
         permission = Manifest.permission.ACCESS_COARSE_LOCATION,
     )
-    val cities = viewModel.searchedCities.collectAsState()
-    var searchText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var searchExpanded by remember { mutableStateOf(false) }
-    var searchVisible by remember { mutableStateOf(false) }
+
+    val mainWeatherMaxHeightDp = screenHeight - 400.dp
+    val mainWeatherMaxHeightPx = with(LocalDensity.current) { mainWeatherMaxHeightDp.roundToPx() }
+    val mainWeatherMinHeightDp = 200.dp
+    val mainWeatherMinHeightPx = with(LocalDensity.current) { mainWeatherMinHeightDp.roundToPx() }
 
 
-    Surface {
+    val connection = remember(mainWeatherMaxHeightPx) {
+        MainWeatherNestedScrollConnection(
+            mainWeatherMaxHeightPx = mainWeatherMaxHeightPx,
+            mainWeatherMinHeightPx = mainWeatherMinHeightPx
+        )
+    }
+
+    Surface(modifier = Modifier.fillMaxSize()) {
+
         Box(
-            modifier = Modifier.fillMaxSize()
-//                .safeDrawingPadding()
-            , contentAlignment = Alignment.TopCenter
+            modifier = Modifier
+                .nestedScroll(connection)
+                .fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            //Logic to check location permission including first time app opened or
-            // after user turned off location permission manually
             if (locationPermissionState.status.shouldShowRationale) {
-                LocationPermissionAlertDialogTest(
+                LocationPermissionAlertDialog(
                     openPermissionRequest = {
                         locationPermissionState.launchPermissionRequest()
-                        viewModel.setLocationPermissionFirstTimeRequest(false)
+                        setLocationPermissionFirstTimeRequest()
                     },
                     description = stringResource(id = R.string.location_permission_dialog_rationale_text)
                 )
-            } else if (!locationPermissionState.status.isGranted && locationPermissionFirstTimeRequested) {
-                LocationPermissionAlertDialogTest(
+            } else if (!locationPermissionState.status.isGranted && !locationPermissionBeenRequestedOnce) {
+                LocationPermissionAlertDialog(
                     openPermissionRequest = locationPermissionState::launchPermissionRequest,
                     description = stringResource(id = R.string.location_permission_dialog_text)
                 )
             }
 
+            LaunchedEffect(key1 = locationPermissionState.status.isGranted) {
+                refreshCurrentLocationCity()
+            }
 
+            val listPadding = connection.mainWeatherOffset.pxToDp()
 
             LazyColumn(
                 state = listState,
                 userScrollEnabled = true,
-                flingBehavior = ScrollableDefaults.flingBehavior()
+                flingBehavior = ScrollableDefaults.flingBehavior(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(
+                    top = listPadding
+                        .coerceIn(mainWeatherMaxHeightDp, 0.dp)
+                )
             ) {
 
-                item {
-                    SearchFieldMask(onClick = {
-                        searchExpanded = !searchExpanded
-                        searchVisible = true
-                    })
-                }
+//                item {
+//                    Spacer(modifier = Modifier.height(systemBarPadding + SEARCH_FIELD_HEIGHT + DEFAULT_SPACER_HEIGHT * 2))
+//                }
 
-                item {
-                    Spacer(modifier = Modifier.height(72.dp))
-                }
+//                item {
+//                    if (!locationPermissionState.status.isGranted && !locationPermissionState.status.shouldShowRationale && !locationPermissionBeenRequestedOnce) {
+//                        Text(text = "You cant use location services")
+//                        FilledTonalButton(onClick = { }) {
+//                            Text(text = "Grant permission")
+//                        }
+//                    }
+//                }
 
-                item {
-
-                    Text(text = "Permission granted is ${locationPermissionState.status}")
-                    Text(text = currentWeather)
-                    Text(text = currentState)
-
-                    FilledTonalButton(onClick = {
-                        viewModel.refreshCurrentCity()
-                    }) {
-
-                    }
-
-                    if (!locationPermissionState.status.isGranted && !locationPermissionState.status.shouldShowRationale && !locationPermissionFirstTimeRequested) {
-                        Text(text = "You cant use location services")
-                        FilledTonalButton(onClick = { }) {
-                            Text(text = "Grant permission")
-                        }
-                    }
-
-                    TextField(value = searchText, onValueChange = {
-                        searchText = it
-                        viewModel.searchCity(it)
-                    }, label = { Text("Label") })
-                }
-
-                items(items = cities.value, key = { item: CityExternalModel ->
-                    item.id
-                }) { city ->
-                    Row(modifier = Modifier.animateItemPlacement()) {
-                        SearchCityItem(city = city,
-                            onClick = { viewModel.saveCity(city.getCityAndCountry()) })
-                    }
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
-                items(items = savedCitiesWeather, key = { item: WeatherWithForecast ->
-                    item.id
-                }) { weatherWithForecast ->
-                    Row(modifier = Modifier.animateItemPlacement()) {
-                        SavedCityWeatherItem(weather = weatherWithForecast,
-                            onClick = { viewModel.deleteSavedCity(weatherWithForecast.id) })
-                    }
-                }
+                weatherForSelectedCity(
+                    weatherState = weatherState,
+                )
             }
 
-            SearchField(
-                cities = savedCitiesWeather,
-                searchExpanded,
-                searchVisible,
-                onClick = { searchExpanded = !searchExpanded },
-                onCloseAnimationEnd = { searchVisible = false }
+            MainWeatherForSelectedCity(
+                weatherState = weatherState,
+                height = mainWeatherMaxHeightDp,
+                connection = connection
             )
 
 
+//            SearchScreenMask(
+//                screenHeight = screenHeight,
+//                screenWidth = screenWidth,
+//                expanded = searchExpanded,
+//                onClick = {
+//                    CoroutineScope(Dispatchers.Main).launch {
+//                        listState.scrollToItem(0)
+//                    }
+//                    searchExpanded = !searchExpanded
+//                },
+//                state = listState,
+//                systemBarPadding = systemBarPadding
+//            )
+//
+//            SearchScreen(
+//                searchedCities = searchedCities.value,
+//                weatherUiState = weatherState,
+//                expanded = searchExpanded,
+//                onClick = {
+//                    CoroutineScope(Dispatchers.Main).launch {
+//                        listState.scrollToItem(0)
+//                    }
+//                    searchExpanded = !searchExpanded
+//                },
+//                onTextSearchValueChange = { query ->
+//                    onSearchCityTextField(query)
+//                },
+//                onSearchedCityClick = {
+//                    onOpenSearchedCity(it.id)
+//                },
+//                systemBarPadding = systemBarPadding
+//            )
+        }
+    }
+}
+
+@Composable
+fun SearchScreenMask(
+    systemBarPadding: Dp,
+    screenHeight: Dp,
+    screenWidth: Dp,
+    expanded: Boolean,
+    onClick: () -> Unit,
+    state: LazyListState
+) {
+
+    val fistItemIsVisible = remember { derivedStateOf { state.firstVisibleItemIndex == 0 } }
+    val offset = remember { derivedStateOf { state.firstVisibleItemScrollOffset } }
+
+    val textPadding by animateDpAsState(
+        targetValue = if (!expanded) 0.dp else 16.dp,
+        label = "textPadding",
+        animationSpec = tween(
+            durationMillis = DURATION / 2,
+            easing = if (expanded) LinearOutSlowInEasing else FastOutSlowInEasing
+        )
+    )
+
+    val radius by animateDpAsState(
+        targetValue = if (expanded) 0.dp else SEARCH_FIELD_CORNER_RADIUS,
+        label = "radius",
+        animationSpec = tween(
+            durationMillis = if (expanded) DURATION * 3 / 2 else DURATION,
+            easing = if (expanded) LinearOutSlowInEasing else LinearOutSlowInEasing
+        )
+    )
+
+    val width by animateDpAsState(
+        targetValue = if (expanded) screenWidth else screenWidth - SEARCH_FIELD_HORIZONTAL_PADDING * 2,
+        label = "horizontalPadding",
+        animationSpec = tween(
+            durationMillis = if (expanded) DURATION * 4 / 5 else DURATION * 4 / 5,
+            easing = if (expanded) LinearOutSlowInEasing else FastOutSlowInEasing
+        )
+    )
+
+    val topPadding by animateDpAsState(
+        targetValue = if (expanded) 0.dp else systemBarPadding + DEFAULT_SPACER_HEIGHT,
+        label = "horizontalPadding",
+        animationSpec = tween(
+            durationMillis = if (expanded) DURATION * 3 / 5 else DURATION * 4 / 5,
+            easing = if (expanded) LinearOutSlowInEasing else FastOutSlowInEasing
+        )
+    )
+
+    val topPaddingInverted by animateDpAsState(
+        targetValue = if (!expanded) 0.dp else systemBarPadding + DEFAULT_SPACER_HEIGHT,
+        label = "horizontalPadding",
+        animationSpec = tween(
+            durationMillis = if (expanded) DURATION * 3 / 5 else DURATION * 4 / 5,
+            easing = if (expanded) LinearOutSlowInEasing else FastOutSlowInEasing
+        )
+    )
+
+    val height by animateDpAsState(
+        targetValue = if (expanded) screenHeight else SEARCH_FIELD_HEIGHT,
+        label = "horizontalPadding",
+        animationSpec = tween(
+            durationMillis = if (expanded) DURATION else DURATION * 4 / 5,
+            easing = if (expanded) LinearOutSlowInEasing else FastOutSlowInEasing
+        )
+    )
+
+    Box(
+        modifier = Modifier
+//            .offset(y = if (!fistItemIsVisible.value) (-200).dp else 0.dp)
+//            .offset(y = -offset.value.pxToDp())
+            .padding(top = topPadding)
+            .width(width)
+            .height(height)
+            .clip(
+                RoundedCornerShape(radius)
+            )
+            .background(color = Color.Blue)
+            .clickable { onClick() }
+    )
+
+    {
+        AnimatedVisibility(
+            visible = !expanded,
+            enter = fadeIn(animationSpec = tween(durationMillis = 0)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 0))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(color = Color.Gray)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = topPaddingInverted),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    IconButton(onClick = { }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            modifier = Modifier.background(color = Color.Green)
+                        )
+                    }
+                    Text(
+                        modifier = Modifier
+                            .padding(start = textPadding)
+                            .background(color = Color.Green),
+                        text = "Search city",
+                        style = LocalTextStyle.current
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchScreen(
+    weatherUiState: WeatherUiState,
+    expanded: Boolean,
+    onClick: () -> Unit,
+    onSearchedCityClick: (CityExternalModel) -> Unit,
+    onTextSearchValueChange: (String) -> Unit,
+    searchedCities: List<CityExternalModel>,
+    systemBarPadding: Dp
+) {
+
+    var text by remember { mutableStateOf("") }
+
+    AnimatedVisibility(
+        visible = expanded,
+        enter = fadeIn(
+            animationSpec = tween(
+                durationMillis = DURATION * 3 / 2,
+                easing = LinearEasing
+            )
+        ),
+        exit = fadeOut(animationSpec = tween(durationMillis = 0))
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(
+                    top = systemBarPadding + DEFAULT_SPACER_HEIGHT / 2
+                )
+                .clickable { onClick() }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back"
+                    )
+                }
+                TextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = {
+                        Text(text = "Search city")
+                    },
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        onTextSearchValueChange(it)
+                    },
+                    colors = TextFieldDefaults.colors(
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
+                    )
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(bottom = DEFAULT_SPACER_HEIGHT)
+            )
+
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize(),
+                userScrollEnabled = true,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(DEFAULT_SPACER_HEIGHT)
+            ) {
+
+                items(items = searchedCities, key = { item: CityExternalModel ->
+                    item.id
+                }) { city ->
+                    Row(modifier = Modifier) {
+                        SearchCityItem(city = city,
+                            onClick = { onSearchedCityClick(city) })
+                    }
+                }
+
+
+                when (weatherUiState) {
+                    is WeatherUiState.Loading -> Unit
+                    is WeatherUiState.Error -> Unit
+                    is WeatherUiState.Success -> {
+                        item {
+                            if (weatherUiState.weather.isNotEmpty() && searchedCities.isNotEmpty()) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = DEFAULT_SPACER_HEIGHT / 2)
+                                )
+                            }
+                        }
+                        items(items = weatherUiState.weather, key = { item: WeatherWithForecast ->
+                            item.id
+                        }) { weatherWithForecast ->
+                            Row(
+                                modifier = Modifier
+                            ) {
+                                SavedCityWeatherItem(weather = weatherWithForecast,
+                                    onClick = { })
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -207,6 +469,7 @@ fun SearchCityItem(city: CityExternalModel, onClick: () -> Unit) {
     }
 }
 
+
 @Composable
 fun SavedCityWeatherItem(weather: WeatherWithForecast, onClick: () -> Unit) {
     Surface {
@@ -214,112 +477,50 @@ fun SavedCityWeatherItem(weather: WeatherWithForecast, onClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp)
-                .background(color = Color.Gray)
-                .padding(horizontal = 8.dp)
+                .background(color = Color.Magenta)
+                .padding(horizontal = 16.dp)
                 .clickable { onClick() },
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.CenterStart
         ) {
             Text(text = "${weather.weather.city}, ${weather.weather.country}, ${weather.weather.tempC} celsius ")
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SearchField(
-    cities: List<WeatherWithForecast>,
-    expanded: Boolean,
-    visible: Boolean,
-    onClick: () -> Unit,
-    onCloseAnimationEnd: () -> Unit
-) {
-    val offset by animateIntOffsetAsState(
-        targetValue = if (!expanded) {
-            IntOffset(0, 150)
-        } else {
-            IntOffset.Zero
-        },
-        label = "offset",
-    )
-    val horizontalPadding: Dp by animateDpAsState(
-        if (expanded) {
-            0.dp
-        } else {
-            8.dp
-        }, label = "horizontalPadding"
-    )
-
-    val alpha by animateFloatAsState(
-        targetValue = if (expanded) {
-            1f
-        } else {
-            0f
-        },
-        animationSpec = tween(),
-        label = "alpha"
-    )
-
-    Box(modifier = Modifier
-        .alpha(if (expanded) 1f else alpha)
-        .fillMaxWidth()
-        .offset { offset }
-        .padding(horizontal = horizontalPadding)
-        .clip(shape = RoundedCornerShape(14.dp))
-        .background(color = Color.Cyan)
-        .clickable { onClick() }
-        .animateContentSize(finishedListener = { initial, target ->
-            if (target.height < initial.height) {
-                onCloseAnimationEnd()
-            }
-        })
-        .let {
-            if (expanded) it.fillMaxSize() else it.height(48.dp)
-        }, contentAlignment = Alignment.TopCenter
-    ) {
-
-
-
-        LazyColumn(
-            userScrollEnabled = true,
-            flingBehavior = ScrollableDefaults.flingBehavior()
-        ) {
-            item {
-                Spacer(modifier = Modifier.height(54.dp))
-            }
-
-            items(items = cities, key = { item: WeatherWithForecast ->
-                item.id
-            }) { weatherWithForecast ->
-                Row(modifier = Modifier.animateItemPlacement()) {
-                    SavedCityWeatherItem(weather = weatherWithForecast,
-                        onClick = {  })
-                }
-            }
-        }
-
-
+fun CurrentWeatherInfo() {
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
 
     }
 }
 
 @Composable
-fun SearchFieldMask(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .offset(y = 55.dp)
-            .padding(horizontal = 8.dp)
-            .clip(shape = RoundedCornerShape(14.dp))
-            .background(color = Color.Blue)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
+fun Int.pxToDp() = with(LocalDensity.current) { this@pxToDp.toDp() }
 
+class MainWeatherNestedScrollConnection(
+    private val mainWeatherMaxHeightPx: Int,
+    private val mainWeatherMinHeightPx: Int
+) : NestedScrollConnection {
 
+    var mainWeatherOffset: Int by mutableIntStateOf(0)
+        private set
 
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        val delta = available.y.toInt()
+        val newOffset = mainWeatherOffset + delta
+        val previousOffset = mainWeatherOffset
+        mainWeatherOffset = newOffset.coerceIn(mainWeatherMinHeightPx - mainWeatherMaxHeightPx, 0)
+        val consumed = mainWeatherOffset - previousOffset
+        return Offset(0f, consumed.toFloat())
     }
-
 }
+
+
+
+
+
+
+
+
 
 

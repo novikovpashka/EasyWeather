@@ -4,7 +4,6 @@ import com.example.easyweather.data.model.CityExternalModel
 import com.example.easyweather.data.network.NoConnectivityException
 import com.example.easyweather.data.network.WeatherApi
 import com.example.easyweather.data.network.models.asExternalModel
-import com.example.easyweather.data.repository.interfaces.CityRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -14,11 +13,17 @@ import javax.inject.Inject
 class CityRepositoryImpl @Inject constructor(private val weatherApi: WeatherApi) : CityRepository {
     override fun searchCity(query: String) = flow {
         try {
+            if (query.length < 3) {
+                emit(CitySearchResponse.Success(emptyList()))
+                return@flow
+            }
             val cities = weatherApi.searchCityByQuery(query = query)
             if (cities.isSuccessful) {
-                cities.body()?.let {
-                    emit(CitySearchResponse.Success(it.toMutableList().map { city ->
+                cities.body()?.let { citiesList ->
+                    emit(CitySearchResponse.Success(citiesList.toMutableList().map { city ->
                         city.asExternalModel()
+                    }.sortedBy {
+                        it.city
                     }))
                 }
             } else {
@@ -28,7 +33,6 @@ class CityRepositoryImpl @Inject constructor(private val weatherApi: WeatherApi)
             when (e) {
                 is NoConnectivityException -> emit(CitySearchResponse.Error(e.message))
                 else -> emit(CitySearchResponse.Error(e.message!!))
-//                else -> emit(CitySearchResponse.Error("Something goes wrong. Try again later"))
             }
         }
     }
@@ -37,10 +41,8 @@ class CityRepositoryImpl @Inject constructor(private val weatherApi: WeatherApi)
 }
 
 sealed class CitySearchResponse(
-    val cities: List<CityExternalModel>? = null,
-    val message: String? = null
 ) {
-    class Success(cities: List<CityExternalModel>) : CitySearchResponse(cities = cities)
-    class Error(message: String) : CitySearchResponse(message = message)
+    data class Success(val cities: List<CityExternalModel>) : CitySearchResponse()
+    data class Error(val message: String) : CitySearchResponse()
     data object Loading : CitySearchResponse()
 }

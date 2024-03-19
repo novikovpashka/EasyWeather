@@ -10,27 +10,27 @@ import javax.inject.Inject
 
 class UserPreferencesRepository @Inject constructor(private val dataStore: DataStore<Preferences>) {
 
-    val userPreferencesFlow: Flow<UserPreferences> = dataStore.data.map { preferences ->
-            val locationPermissionFirstTimeRequest =
-                preferences[PreferencesKeys.LOCATION_PERMISSION_FIRST_TIME_REQUEST] ?: true
-            UserPreferences(
-                locationPermissionFirstTimeRequest
+    val userDataFlow: Flow<UserData> = dataStore.data.map { preferences ->
+            val locationPermissionBeenRequestedOnce =
+                preferences[PreferencesKeys.LOCATION_PERMISSION_BEEN_REQUESTED_ONCE] ?: false
+            UserData(
+                locationPermissionBeenRequestedOnce
             )
         }
 
-    suspend fun setLocationPermissionPermanentlyDeclined(declined: Boolean) {
+    suspend fun setLocationPermissionBeenRequestedOnce() {
         dataStore.edit { preferences ->
-            preferences[PreferencesKeys.LOCATION_PERMISSION_FIRST_TIME_REQUEST] = declined
+            preferences[PreferencesKeys.LOCATION_PERMISSION_BEEN_REQUESTED_ONCE] = true
         }
     }
 
     private object PreferencesKeys {
-        val LOCATION_PERMISSION_FIRST_TIME_REQUEST =
-            booleanPreferencesKey("location_permission_permanently_declined")
+        val LOCATION_PERMISSION_BEEN_REQUESTED_ONCE =
+            booleanPreferencesKey("location_permission_been_requested_once")
     }
 
-    data class UserPreferences(
-        val locationPermissionFirstTimeRequest: Boolean
+    data class UserData(
+        val locationPermissionBeenRequestedOnce: Boolean
     )
 
 }

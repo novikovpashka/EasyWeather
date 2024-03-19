@@ -1,4 +1,4 @@
-package com.example.easyweather.data.repository.interfaces
+package com.example.easyweather.data.repository
 
 import com.example.easyweather.data.repository.CitySearchResponse
 import kotlinx.coroutines.flow.Flow
