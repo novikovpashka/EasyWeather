@@ -1,6 +1,7 @@
 package com.example.easyweather.ui.home
 
 import android.Manifest
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -42,6 +43,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -61,7 +63,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import com.example.easyweather.R
 import com.example.easyweather.data.model.CityExternalModel
@@ -71,6 +72,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
+import kotlin.math.roundToInt
 
 const val DURATION = 400
 val SEARCH_FIELD_HEIGHT = 48.dp
@@ -99,19 +101,21 @@ fun Home(
     val bottomBarPadding = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
     val screenHeight =
         LocalConfiguration.current.screenHeightDp.dp + systemBarPadding + bottomBarPadding
+
+    SideEffect {
+        Log.v("mytag", bottomBarPadding.toString())
+    }
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
 
     val locationPermissionState = rememberPermissionState(
         permission = Manifest.permission.ACCESS_COARSE_LOCATION,
     )
     val listState = rememberLazyListState()
-    var searchExpanded by remember { mutableStateOf(false) }
 
     val mainWeatherMaxHeightDp = screenHeight - 400.dp
     val mainWeatherMaxHeightPx = with(LocalDensity.current) { mainWeatherMaxHeightDp.roundToPx() }
     val mainWeatherMinHeightDp = 200.dp
     val mainWeatherMinHeightPx = with(LocalDensity.current) { mainWeatherMinHeightDp.roundToPx() }
-
 
     val connection = remember(mainWeatherMaxHeightPx) {
         MainWeatherNestedScrollConnection(
@@ -121,7 +125,6 @@ fun Home(
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
-
         Box(
             modifier = Modifier
                 .nestedScroll(connection)
@@ -147,17 +150,11 @@ fun Home(
                 refreshCurrentLocationCity()
             }
 
-            val listPadding = connection.mainWeatherOffset.pxToDp()
-
             LazyColumn(
                 state = listState,
                 userScrollEnabled = true,
                 flingBehavior = ScrollableDefaults.flingBehavior(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(
-                    top = listPadding
-                        .coerceIn(mainWeatherMaxHeightDp, 0.dp)
-                )
             ) {
 
 //                item {
@@ -175,15 +172,17 @@ fun Home(
 
                 weatherForSelectedCity(
                     weatherState = weatherState,
+                    connection = connection
                 )
             }
 
             MainWeatherForSelectedCity(
                 weatherState = weatherState,
                 height = mainWeatherMaxHeightDp,
-                connection = connection
+                connection = connection,
+                listState = listState,
+                onMainWeatherScroll = { }
             )
-
 
 //            SearchScreenMask(
 //                screenHeight = screenHeight,
@@ -500,27 +499,24 @@ fun Int.pxToDp() = with(LocalDensity.current) { this@pxToDp.toDp() }
 class MainWeatherNestedScrollConnection(
     private val mainWeatherMaxHeightPx: Int,
     private val mainWeatherMinHeightPx: Int
+
 ) : NestedScrollConnection {
 
     var mainWeatherOffset: Int by mutableIntStateOf(0)
         private set
 
+    var listPadding: Int by mutableIntStateOf(mainWeatherMaxHeightPx)
+        private set
+
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-        val delta = available.y.toInt()
+        val delta = available.y.roundToInt()
         val newOffset = mainWeatherOffset + delta
         val previousOffset = mainWeatherOffset
-        mainWeatherOffset = newOffset.coerceIn(mainWeatherMinHeightPx - mainWeatherMaxHeightPx, 0)
+        mainWeatherOffset = newOffset.coerceIn(-mainWeatherMaxHeightPx + mainWeatherMinHeightPx, 0)
+        val newPadding = listPadding + delta
+        val oldPadding = listPadding
+        listPadding = newPadding.coerceIn(0, mainWeatherMaxHeightPx)
         val consumed = mainWeatherOffset - previousOffset
         return Offset(0f, consumed.toFloat())
     }
 }
-
-
-
-
-
-
-
-
-
-
