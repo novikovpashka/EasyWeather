@@ -18,17 +18,20 @@ class CityRepositoryImpl @Inject constructor(private val weatherApi: WeatherApi)
                 return@flow
             }
             val cities = weatherApi.searchCityByQuery(query = query)
-            if (cities.isSuccessful) {
-                cities.body()?.let { citiesList ->
-                    emit(CitySearchResponse.Success(citiesList.toMutableList().map { city ->
-                        city.asExternalModel()
-                    }.sortedBy {
-                        it.city
-                    }))
-                }
-            } else {
+
+            if (!cities.isSuccessful) {
                 emit(CitySearchResponse.Error(cities.errorBody().toString()))
+                return@flow
             }
+
+            cities.body()?.let { citiesList ->
+                emit(CitySearchResponse.Success(citiesList.toMutableList().map { city ->
+                    city.asExternalModel()
+                }.sortedBy {
+                    it.city
+                }))
+            }
+
         } catch (e: Exception) {
             when (e) {
                 is NoConnectivityException -> emit(CitySearchResponse.Error(e.message))
