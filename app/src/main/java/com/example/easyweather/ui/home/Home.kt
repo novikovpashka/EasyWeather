@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
@@ -208,15 +209,35 @@ fun Home(
                 )
             }
 
+
             LaunchedEffect(key1 = locationPermissionState.status.isGranted) {
                 refreshCurrentLocationCity()
             }
 
-            LazyColumn(
-                state = listState,
-                userScrollEnabled = true,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
+            Column {
+
+                MainWeatherForSelectedCity(
+                    weatherState = weatherState,
+                    maxHeight = mainWeatherMaxHeightDp,
+                    maxHeightPx = mainWeatherMaxHeightPx,
+                    minHeight = mainWeatherMinHeightDp,
+                    minHeightPx = mainWeatherMinHeightPx,
+                    connection = connection,
+                    listState = listState,
+                    onMainWeatherDrag = {
+                    },
+                    coroutineScope = coroutineScope,
+                    onDragStateChange = { dragState ->
+                        connection.updateCollapsed(dragState)
+                    }
+                )
+
+                LazyColumn(
+                    state = listState,
+                    userScrollEnabled = true,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f).offset(y = (-30).dp)
+                ) {
 //                item {
 //                    Spacer(modifier = Modifier.height(systemBarPadding + SEARCH_FIELD_HEIGHT + DEFAULT_SPACER_HEIGHT * 2))
 //                }
@@ -230,34 +251,20 @@ fun Home(
 //                    }
 //                }
 
-                stickyHeader {
-                    MainWeatherForSelectedCity(
+                    weatherForSelectedCity(
                         weatherState = weatherState,
                         maxHeight = mainWeatherMaxHeightDp,
                         maxHeightPx = mainWeatherMaxHeightPx,
                         minHeight = mainWeatherMinHeightDp,
                         minHeightPx = mainWeatherMinHeightPx,
-                        connection = connection,
                         listState = listState,
-                        onMainWeatherDrag = {
-                        },
-                        coroutineScope = coroutineScope,
-                        onDragStateChange = { dragState ->
-                            connection.updateCollapsed(dragState)
-                        }
+                        modifier = Modifier,
+                        listPadding = listPadding
                     )
                 }
 
-                weatherForSelectedCity(
-                    weatherState = weatherState,
-                    maxHeight = mainWeatherMaxHeightDp,
-                    maxHeightPx = mainWeatherMaxHeightPx,
-                    minHeight = mainWeatherMinHeightDp,
-                    minHeightPx = mainWeatherMinHeightPx,
-                    listState = listState,
-                    modifier = Modifier,
-                    listPadding = listPadding
-                )
+
+
             }
 
 //            MainWeatherForSelectedCity(

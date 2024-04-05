@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -111,6 +112,7 @@ fun MainWeatherForSelectedCity(
         if (dragState.requireOffset() == 0f) onDragStateChange(DragState.EXPANDED)
         else if (dragState.requireOffset() == endPx) onDragStateChange(DragState.COLLAPSED)
         else onDragStateChange(DragState.IN_PROGRESS)
+        listState.stopScroll()
     }
 
     LaunchedEffect(key1 = connection.mainOffset) {

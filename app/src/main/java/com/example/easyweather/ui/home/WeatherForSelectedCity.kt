@@ -31,9 +31,9 @@ fun LazyListScope.weatherForSelectedCity(
     listPadding: Int
 ) {
 
-//    item {
-//        Spacer(modifier = modifier.height(listPadding.pxToDp()))
-//    }
+    item {
+        Spacer(modifier = modifier.height(30.dp))
+    }
 
     item {
         Box(
