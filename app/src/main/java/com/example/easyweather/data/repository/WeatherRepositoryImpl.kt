@@ -43,7 +43,6 @@ class WeatherRepositoryImpl @Inject constructor(
                     response.body()
                         ?.let {
                             val x = weatherDao.insertWeather(it.currentLocationAsDatabaseModelWeather())
-                            Log.v("mytag", x.toString())
                         }
                     response.body()?.let { weatherApiResponse ->
                         val cityId = CURRENT_LOCATION

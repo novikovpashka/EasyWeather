@@ -1,45 +1,27 @@
 package com.example.easyweather.ui.home
 
 import android.util.Log
-import androidx.annotation.FloatRange
 import androidx.compose.animation.SplineBasedFloatDecayAnimationSpec
-import androidx.compose.animation.core.DecayAnimation
-import androidx.compose.animation.core.DecayAnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.FloatDecayAnimationSpec
-import androidx.compose.animation.core.FloatExponentialDecaySpec
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.generateDecayAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.AnchoredDragScope
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.animateTo
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.gestures.snapTo
-import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,14 +32,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.example.easyweather.ui.WeatherUiState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 enum class DragValue { Start, End }
+
+enum class DragState { COLLAPSED, EXPANDED, IN_PROGRESS }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -71,7 +54,8 @@ fun MainWeatherForSelectedCity(
     minHeight: Dp,
     coroutineScope: CoroutineScope,
     maxHeightPx: Int,
-    minHeightPx: Int
+    minHeightPx: Int,
+    onDragStateChange: (DragState) -> Unit
 ) {
 
     val density = LocalDensity.current
@@ -100,53 +84,53 @@ fun MainWeatherForSelectedCity(
             initialValue = DragValue.Start,
             positionalThreshold = { totalDistance: Float -> totalDistance * 0.2f },
             velocityThreshold = { with(density) { 100.dp.toPx() } },
-            snapAnimationSpec = tween(easing = FastOutSlowInEasing),
+            snapAnimationSpec = tween(),
             decayAnimationSpec = anim
         )
     }.apply {
         updateAnchors(anchors)
     }
 
-    LaunchedEffect(key1 = connection.mainOffset) {
-        if (listState.isScrollInProgress) {
-            Log.v("mytag", "===DRAG INSIDE=== for ${connection.mainOffset}")
-            scrollingUp = connection.listOffset < previousListOffset
-            previousListOffset = connection.listOffset
-            dragState.anchoredDrag {
-                this.dragTo(connection.mainOffset.toFloat(), 100f)
-            }
-        }
-    }
-//
-    LaunchedEffect(key1 = !listState.isScrollInProgress && !listState.canScrollBackward) {
-        Log.v("mytag", "ANIMATING")
+    val isDragged = listState.interactionSource.collectIsDraggedAsState()
+
+//    LaunchedEffect(key1 = !listState.isScrollInProgress) {
+//        if (dragState.requireOffset() != anchors.maxAnchor() || dragState.requireOffset() != anchors.minAnchor())
+//            if (scrollingUp)
+//                dragState.animateTo(DragValue.End)
+//            else dragState.animateTo(DragValue.Start)
+//    }
+
+    LaunchedEffect(key1 = !isDragged.value) {
+        Log.v("mytag", "isDragged is ${isDragged.value}")
         if (scrollingUp)
             dragState.animateTo(DragValue.End)
         else dragState.animateTo(DragValue.Start)
-
-//            dragState.animateTo(anchors.closestAnchor(dragState.offset) as DragValue)
     }
+
+    LaunchedEffect(key1 = dragState.requireOffset()) {
+        if (dragState.requireOffset() == 0f) onDragStateChange(DragState.EXPANDED)
+        else if (dragState.requireOffset() == endPx) onDragStateChange(DragState.COLLAPSED)
+        else onDragStateChange(DragState.IN_PROGRESS)
+    }
+
+    LaunchedEffect(key1 = connection.mainOffset) {
+        scrollingUp = connection.mainOffset < previousListOffset
+        previousListOffset = connection.mainOffset
+
+        if (isDragged.value)
+            dragState.anchoredDrag {
+                this.dragTo(connection.mainOffset.toFloat(), 0f)
+            }
+    }
+
 
     Box(
         modifier = modifier
-            .offset {
-                IntOffset(
-                    0,
-                    if (listState.isScrollInProgress)
-                        connection.mainOffset
-//                    else if (listState.canScrollBackward && !listState.isScrollInProgress) connection.mainOffset
-                        else dragState
-                        .requireOffset()
-                        .roundToInt()
-                        .apply {
-                            onMainWeatherDrag(this)
-                        }
-                )
-            }
             .anchoredDraggable(
                 state = dragState,
                 orientation = Orientation.Vertical
             )
+            .zIndex(1f)
             .clip(
                 RoundedCornerShape(
                     topStart = 0.dp,
@@ -157,7 +141,10 @@ fun MainWeatherForSelectedCity(
             )
             .background(color = Color.Red.copy(alpha = 1f))
             .height(
-                maxHeight
+                (maxHeightPx + dragState
+                    .requireOffset()
+                    .roundToInt())
+                    .pxToDp()
             )
             .fillMaxWidth(),
         contentAlignment = Alignment.Center

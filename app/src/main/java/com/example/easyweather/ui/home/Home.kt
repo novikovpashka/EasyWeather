@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +22,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
@@ -63,7 +63,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.example.easyweather.R
 import com.example.easyweather.data.model.CityExternalModel
@@ -81,10 +81,64 @@ val SEARCH_FIELD_HORIZONTAL_PADDING = 16.dp
 val SEARCH_FIELD_CORNER_RADIUS = SEARCH_FIELD_HEIGHT / 2
 val DEFAULT_SPACER_HEIGHT = 8.dp
 
-//TEST
+class MainWeatherNestedScrollConnection(
+    private val mainWeatherMaxHeightPx: Int,
+    private val mainWeatherMinHeightPx: Int,
+    private val listState: LazyListState
+) : NestedScrollConnection {
+
+    var mainOffset: Int by mutableIntStateOf(0)
+        private set
+
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+
+        val delta = available.y.roundToInt()
+
+        if (listState.canScrollBackward) {
+            return Offset.Zero
+        }
+
+
+        val newMainOffset =
+            if (!listState.canScrollBackward) mainOffset + delta else mainOffset
+        val previousOffset = mainOffset
+
+
+
+        mainOffset = newMainOffset.coerceIn(-(mainWeatherMaxHeightPx - mainWeatherMinHeightPx), 0)
+        val consumed = newMainOffset - previousOffset
+
+
+        return if (mainOffset > -(mainWeatherMaxHeightPx - mainWeatherMinHeightPx))
+            Offset(0f, available.y)
+        else
+            Offset.Zero
+    }
+
+    override suspend fun onPreFling(available: Velocity): Velocity {
+
+        if (!listState.canScrollBackward) return Velocity(0f, available.y)
+        return Velocity.Zero
+
+//        if (mainOffset > -(mainWeatherMaxHeightPx - mainWeatherMinHeightPx)) return Velocity(0f, available.y)
+//        return Velocity.Zero
+
+    }
+
+    fun updateCollapsed(dragState: DragState) {
+        when (dragState) {
+            DragState.COLLAPSED -> mainOffset = -(mainWeatherMaxHeightPx - mainWeatherMinHeightPx)
+            DragState.EXPANDED -> mainOffset = 0
+            DragState.IN_PROGRESS -> {
+            }
+        }
+        Log.v("mytag", "collapsed updated to $dragState, mainoffset now is $mainOffset")
+    }
+}
 
 @OptIn(
-    ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class
+    ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
 )
 @Composable
 fun Home(
@@ -112,19 +166,25 @@ fun Home(
     )
     val listState = rememberLazyListState()
 
-    val mainWeatherMaxHeightDp = screenHeight * 2 / 3
+//    val mainWeatherMaxHeightDp = screenHeight * 2 / 3
+
+    val mainWeatherMaxHeightDp = 600.dp
     val mainWeatherMaxHeightPx = with(LocalDensity.current) { mainWeatherMaxHeightDp.roundToPx() }
     val mainWeatherMinHeightDp = 200.dp
     val mainWeatherMinHeightPx = with(LocalDensity.current) { mainWeatherMinHeightDp.roundToPx() }
 
+    var listPadding: Int by remember { mutableIntStateOf(mainWeatherMaxHeightPx) }
+    var mainCollapsed by remember { mutableStateOf(false) }
 
-    val connection = remember(mainWeatherMaxHeightPx) {
+
+    val connection = remember {
         MainWeatherNestedScrollConnection(
             mainWeatherMaxHeightPx = mainWeatherMaxHeightPx,
             mainWeatherMinHeightPx = mainWeatherMinHeightPx,
             listState = listState
         )
     }
+
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -152,9 +212,6 @@ fun Home(
                 refreshCurrentLocationCity()
             }
 
-            var weatherOffset = remember { mutableIntStateOf(connection.listOffset) }
-            var dragOffset by remember { mutableIntStateOf(0) }
-
             LazyColumn(
                 state = listState,
                 userScrollEnabled = true,
@@ -173,56 +230,54 @@ fun Home(
 //                    }
 //                }
 
+                stickyHeader {
+                    MainWeatherForSelectedCity(
+                        weatherState = weatherState,
+                        maxHeight = mainWeatherMaxHeightDp,
+                        maxHeightPx = mainWeatherMaxHeightPx,
+                        minHeight = mainWeatherMinHeightDp,
+                        minHeightPx = mainWeatherMinHeightPx,
+                        connection = connection,
+                        listState = listState,
+                        onMainWeatherDrag = {
+                        },
+                        coroutineScope = coroutineScope,
+                        onDragStateChange = { dragState ->
+                            connection.updateCollapsed(dragState)
+                        }
+                    )
+                }
+
                 weatherForSelectedCity(
                     weatherState = weatherState,
-                    connection = connection,
                     maxHeight = mainWeatherMaxHeightDp,
                     maxHeightPx = mainWeatherMaxHeightPx,
                     minHeight = mainWeatherMinHeightDp,
                     minHeightPx = mainWeatherMinHeightPx,
                     listState = listState,
-                    modifier = Modifier.offset {
-                        IntOffset(x = 0, y = connection.listOffset).apply {
-                            if (listState.isScrollInProgress) {
-                                connection.updateMainOffsetByMainDrag(-mainWeatherMaxHeightPx + connection.listOffset)
-                                Log.v(
-                                    "mytag",
-                                    "SCROLLING LIST: listOffset is ${connection.listOffset}, mainOffset is ${connection.mainOffset}"
-                                )
-                            }
-
-                        }
-                    }
+                    modifier = Modifier,
+                    listPadding = listPadding
                 )
             }
 
-            MainWeatherForSelectedCity(
-                weatherState = weatherState,
-                maxHeight = mainWeatherMaxHeightDp,
-                maxHeightPx = mainWeatherMaxHeightPx,
-                minHeight = mainWeatherMinHeightDp,
-                minHeightPx = mainWeatherMinHeightPx,
-                connection = connection,
-                listState = listState,
-                onMainWeatherDrag = {
-                    Log.v("mytag", "UPDATING BY DRAG for $it px")
-                    connection.updateListOffsetByMainDrag(it)
-                    connection.updateMainOffsetByMainDrag(it)
-                    Log.v(
-                        "mytag",
-                        "listOffset is ${connection.listOffset}, mainOffset is ${connection.mainOffset}"
-                    )
-
-//                    connection.updateMainOffsetByMainDrag(it)
-//                    connection.updateListOffsetByMainDrag(mainWeatherMinHeightPx - it)
-//                                    dragOffset = it
-//                    draggingOffset = it
-//                    val newHeight = mainHeightResult + it.roundToInt()
-//                    mainHeightResult =
-//                        newHeight.coerceIn(mainWeatherMinHeightPx, mainWeatherMaxHeightPx)
-                },
-                coroutineScope = coroutineScope
-            )
+//            MainWeatherForSelectedCity(
+//                weatherState = weatherState,
+//                maxHeight = mainWeatherMaxHeightDp,
+//                maxHeightPx = mainWeatherMaxHeightPx,
+//                minHeight = mainWeatherMinHeightDp,
+//                minHeightPx = mainWeatherMinHeightPx,
+//                connection = connection,
+//                listState = listState,
+//                onMainWeatherDrag = { delta ->
+//                    listPadding = (mainWeatherMaxHeightPx + delta).coerceIn(
+//                        mainWeatherMinHeightPx,
+//                        mainWeatherMaxHeightPx
+//                    ).apply {
+//
+//                    }
+//                },
+//                coroutineScope = coroutineScope
+//            )
         }
 
 //            SearchScreenMask(
@@ -537,47 +592,4 @@ fun CurrentWeatherInfo() {
 @Composable
 fun Int.pxToDp() = with(LocalDensity.current) { this@pxToDp.toDp() }
 
-class MainWeatherNestedScrollConnection(
-    private val mainWeatherMaxHeightPx: Int,
-    private val mainWeatherMinHeightPx: Int,
-    private val listState: LazyListState
-) : NestedScrollConnection {
 
-    var mainOffset: Int by mutableIntStateOf(0)
-        private set
-
-    var listOffset: Int by mutableIntStateOf(mainWeatherMaxHeightPx)
-        private set
-
-
-    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-
-        val delta = available.y.roundToInt()
-
-        val newListOffset = if (listState.canScrollBackward) 0 else listOffset + delta
-        val previousListOffset = listOffset
-
-        val newMainOffset = if (listState.canScrollBackward) mainOffset else mainOffset + delta
-        mainOffset = newMainOffset.coerceIn(-mainWeatherMaxHeightPx + mainWeatherMinHeightPx, 0)
-
-        listOffset = newListOffset.coerceIn(mainWeatherMinHeightPx, mainWeatherMaxHeightPx)
-
-        val consumed = listOffset - mainWeatherMaxHeightPx
-
-        if (listOffset > mainWeatherMinHeightPx) {
-            return Offset(0f, consumed.toFloat())
-        }
-
-        return Offset.Zero
-    }
-
-    fun updateListOffsetByMainDrag(offset: Int) {
-        this.listOffset = mainWeatherMaxHeightPx + offset
-    }
-
-    fun updateMainOffsetByMainDrag(offset: Int) {
-        this.mainOffset = offset
-    }
-
-
-}
