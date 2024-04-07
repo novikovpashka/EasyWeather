@@ -2,7 +2,6 @@ package com.example.easyweather.ui.home
 
 import android.util.Log
 import androidx.compose.animation.SplineBasedFloatDecayAnimationSpec
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.generateDecayAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -33,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.example.easyweather.ui.WeatherUiState
@@ -84,7 +84,7 @@ fun MainWeatherForSelectedCity(
         AnchoredDraggableState(
             initialValue = DragValue.Start,
             positionalThreshold = { totalDistance: Float -> totalDistance * 0.2f },
-            velocityThreshold = { with(density) { 100.dp.toPx() } },
+            velocityThreshold = { with(density) { 0.dp.toPx() } },
             snapAnimationSpec = tween(),
             decayAnimationSpec = anim
         )
@@ -94,37 +94,33 @@ fun MainWeatherForSelectedCity(
 
     val isDragged = listState.interactionSource.collectIsDraggedAsState()
 
-//    LaunchedEffect(key1 = !listState.isScrollInProgress) {
-//        if (dragState.requireOffset() != anchors.maxAnchor() || dragState.requireOffset() != anchors.minAnchor())
-//            if (scrollingUp)
-//                dragState.animateTo(DragValue.End)
-//            else dragState.animateTo(DragValue.Start)
-//    }
-
     LaunchedEffect(key1 = !isDragged.value) {
-        Log.v("mytag", "isDragged is ${isDragged.value}")
         if (scrollingUp)
             dragState.animateTo(DragValue.End)
         else dragState.animateTo(DragValue.Start)
     }
 
     LaunchedEffect(key1 = dragState.requireOffset()) {
-        if (dragState.requireOffset() == 0f) onDragStateChange(DragState.EXPANDED)
-        else if (dragState.requireOffset() == endPx) onDragStateChange(DragState.COLLAPSED)
-        else onDragStateChange(DragState.IN_PROGRESS)
-        listState.stopScroll()
+        val currentOffset = dragState.requireOffset()
+        if (currentOffset == 0f) onDragStateChange(DragState.EXPANDED)
+        else if (currentOffset == endPx) onDragStateChange(DragState.COLLAPSED)
+        else if (currentOffset > 0f && currentOffset < endPx || dragState.isAnimationRunning){
+            listState.stopScroll()
+            onDragStateChange(DragState.IN_PROGRESS)
+        }
     }
 
     LaunchedEffect(key1 = connection.mainOffset) {
         scrollingUp = connection.mainOffset < previousListOffset
-        previousListOffset = connection.mainOffset
+        previousListOffset = connection.mainOffset.roundToInt()
+
+        Log.v("mytag", "dragvalue is ${dragState.requireOffset()}, connection is ${connection.mainOffset}")
 
         if (isDragged.value)
             dragState.anchoredDrag {
                 this.dragTo(connection.mainOffset.toFloat(), 0f)
             }
     }
-
 
     Box(
         modifier = modifier
@@ -143,16 +139,19 @@ fun MainWeatherForSelectedCity(
             )
             .background(color = Color.Red.copy(alpha = 1f))
             .height(
-                (maxHeightPx + dragState
+                (dragState
                     .requireOffset()
-                    .roundToInt())
-                    .pxToDp()
+                    .roundToInt()
+                    .pxToDp() + maxHeightPx.pxToDp())
+                    .coerceIn(
+                        minHeight,
+                        maxHeight
+                    )
             )
             .fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
         Text(text = "HELLO")
-
     }
 }
 

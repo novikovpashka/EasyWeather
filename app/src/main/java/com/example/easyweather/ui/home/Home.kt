@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +76,8 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 const val DURATION = 400
@@ -83,53 +87,40 @@ val SEARCH_FIELD_CORNER_RADIUS = SEARCH_FIELD_HEIGHT / 2
 val DEFAULT_SPACER_HEIGHT = 8.dp
 
 class MainWeatherNestedScrollConnection(
-    private val mainWeatherMaxHeightPx: Int,
-    private val mainWeatherMinHeightPx: Int,
+    mainWeatherMaxHeightPx: Int,
+    mainWeatherMinHeightPx: Int,
     private val listState: LazyListState
 ) : NestedScrollConnection {
 
-    var mainOffset: Int by mutableIntStateOf(0)
+    private val maxAvailableOffset = -(mainWeatherMaxHeightPx - mainWeatherMinHeightPx)
+
+    var mainOffset: Float by mutableFloatStateOf(0f)
         private set
 
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
 
-        val delta = available.y.roundToInt()
-
-        if (listState.canScrollBackward) {
-            return Offset.Zero
-        }
-
+        val delta = available.y
 
         val newMainOffset =
-            if (!listState.canScrollBackward) mainOffset + delta else mainOffset
+            if (mainOffset == maxAvailableOffset.toFloat() && listState.canScrollBackward) mainOffset else mainOffset + delta
         val previousOffset = mainOffset
 
+        mainOffset = newMainOffset.coerceIn(maxAvailableOffset.toFloat(), 0f)
+        val consumed = mainOffset - previousOffset
 
+        return Offset(0f, consumed.toFloat())
 
-        mainOffset = newMainOffset.coerceIn(-(mainWeatherMaxHeightPx - mainWeatherMinHeightPx), 0)
-        val consumed = newMainOffset - previousOffset
-
-
-        return if (mainOffset > -(mainWeatherMaxHeightPx - mainWeatherMinHeightPx))
-            Offset(0f, available.y)
-        else
-            Offset.Zero
     }
 
     override suspend fun onPreFling(available: Velocity): Velocity {
-
         if (!listState.canScrollBackward) return Velocity(0f, available.y)
         return Velocity.Zero
-
-//        if (mainOffset > -(mainWeatherMaxHeightPx - mainWeatherMinHeightPx)) return Velocity(0f, available.y)
-//        return Velocity.Zero
-
     }
 
     fun updateCollapsed(dragState: DragState) {
         when (dragState) {
-            DragState.COLLAPSED -> mainOffset = -(mainWeatherMaxHeightPx - mainWeatherMinHeightPx)
-            DragState.EXPANDED -> mainOffset = 0
+            DragState.COLLAPSED -> mainOffset = maxAvailableOffset.toFloat()
+            DragState.EXPANDED -> mainOffset = 0f
             DragState.IN_PROGRESS -> {
             }
         }
@@ -186,6 +177,7 @@ fun Home(
         )
     }
 
+    var mainHeightPx = mainWeatherMaxHeightPx + connection.mainOffset
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -214,8 +206,9 @@ fun Home(
                 refreshCurrentLocationCity()
             }
 
-            Column {
 
+
+            Column {
                 MainWeatherForSelectedCity(
                     weatherState = weatherState,
                     maxHeight = mainWeatherMaxHeightDp,
@@ -236,7 +229,9 @@ fun Home(
                     state = listState,
                     userScrollEnabled = true,
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f).offset(y = (-30).dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .offset(y = (-30).dp)
                 ) {
 //                item {
 //                    Spacer(modifier = Modifier.height(systemBarPadding + SEARCH_FIELD_HEIGHT + DEFAULT_SPACER_HEIGHT * 2))
@@ -262,7 +257,6 @@ fun Home(
                         listPadding = listPadding
                     )
                 }
-
 
 
             }
